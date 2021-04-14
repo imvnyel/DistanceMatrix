@@ -9,7 +9,7 @@ import sqlite3
 conn = sqlite3.connect('HdDB.db')
 c = conn.cursor()
 
-c.execute('''CREATE TABLE IF NOT EXISTS HDDistances(ReferenceNumber number UNIQUE PRIMARY KEY,
+c.execute('''CREATE TABLE IF NOT EXISTS HDDistances(ReferenceNumber number PRIMARY KEY,
 	Vin text, 
 	CustomerName text, 
 	Address text, 
@@ -44,20 +44,22 @@ def create_df(file_read):
 	df['Address'] = df['DeliveryAddress'] + ' ' + df['DeliveryZip'] + ' ' + df['DeliveryCity']
 
 	#Create new dataframe to be used to create geocode
-
 	df['EncodedAddress'] = df.DeliveryAddress.apply(encode_address)
-	encoded_df_new = df[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'OrderType', 'VehicleSubStatus', 'EncodedAddress', 'DeliveryZip', 'DeliveryCity']]
-	print('Geocoding Addresses...')
-	encoded_df_new['Geocode'] = encoded_df_new.apply(geo_code, axis=1)
+	encoded_df = df[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'OrderType', 'VehicleSubStatus', 'EncodedAddress', 'DeliveryZip', 'DeliveryCity']]
+	return encoded_df
 
+def converter(geocode_df):
+	print('Geocoding Addresses...')
+	geocode_df['Geocode'] = geocode_df.apply(geo_code, axis=1)
+		
 	#Convert Geocoded Column into DistanceMatrix values
 	print('Calculating Distance Matrices...')
-	encoded_df_new[['TravelTime', 'Distance']] = encoded_df_new.apply(distance_matrix, axis=1, result_type='expand')
+	geocode_df[['TravelTime', 'Distance']] = geocode_df.apply(distance_matrix, axis=1, result_type='expand')
 
 	#Strip 'RN' from ReferenceNumber to be used as Unique key in SQL server
-	encoded_df_new['ReferenceNumber'] = encoded_df_new.ReferenceNumber.apply(lambda x: x.strip('RN'))
-	geocoded_df = encoded_df_new[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'VehicleSubStatus','OrderType', 'TravelTime', 'Distance']]
-	return geocoded_df
+	geocode_df['ReferenceNumber'] = geocode_df.ReferenceNumber.apply(lambda x: x.strip('RN'))
+	convertered_df = geocode_df[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'VehicleSubStatus','OrderType', 'TravelTime', 'Distance']]
+	return convertered_df
 
 # Convert address into HTML query format
 def encode_address(address_data): 
@@ -80,7 +82,6 @@ def geo_code(data):
 	print(call.status_code, call.reason)
 	geo_json = json.loads(call.text)
 	coords = [x for x in geo_json['features'][0]['geometry']['coordinates']]
-	#google_style_coords = coords.reverse() #coordinates listed as latitude, longitude for use with GoogleMaps
 	return coords # longitude,latitude
 
 #Calculate distance Matrix
@@ -109,10 +110,10 @@ def distance_matrix(geo_data):
 	return time_to_loc, distance_to_loc
 
 #Export to excel
-def new_excel(encoded_df):
+def new_excel(DistMat_df):
 
-	encoded_df.to_sql('HDDistances', conn, if_exists='append', index = False)
-	encoded_df.to_excel('HomeDelivery_DistanceMatrix_'+date+'.xlsx', index=False, engine='openpyxl')
+	DistMat_df.to_sql('HDDistances', conn, if_exists='append', index = False)
+	DistMat_df.to_excel('HomeDelivery_DistanceMatrix_'+date+'.xlsx', index=False, engine='openpyxl')
 
 def GeoGui():
 	menu_def = [['File', 'Exit'],
@@ -126,6 +127,7 @@ def GeoGui():
 	layout = [[sg.Menu(menu_def, )],
 	[sg.Text('Select File (.xlsx or .csv): '), sg.In(key='ZiplabsReport'), sg.FileBrowse(target='ZiplabsReport', size=(10, 1))],
 	[sg.Button('Generate', size=(72, 1))],
+	[sg.Button('Generate Distance Matrix', size=(72, 1))],
 	[sg.Button('Export', size=(72, 1))],
 	[sg.Multiline(size=(80,20), autoscroll=True, write_only=True, auto_refresh=True, reroute_stdout=True, )]]
 
@@ -141,9 +143,13 @@ def GeoGui():
 				print('Preview\n', encoded_df.head())
 				window.Refresh()
 			except Exception as e: print(e)
+		if event == 'Generate Distance Matrix':
+			try:
+				DistMat_df = converter(encoded_df)
+			except Exception as e: print(e)
 		if event == 'Export':
 			try:
-				new_excel(encoded_df)
+				new_excel(DistMat_df)
 				print('Exporting to Database...')
 				print('Exporting New Excel...')
 				print('Successful!')
