@@ -129,9 +129,10 @@ def distance_matrix(geo_data):
 			return time_to_loc, distance_to_loc
 
 #Export to excel
-def new_excel(DistMat_df):
-
+def new_db(DistMat_df):
 	DistMat_df.to_sql('HDDistances', conn, if_exists='append', index = False)
+
+def new_excel(DistMat_df)
 	DistMat_df.to_excel('HomeDelivery_DistanceMatrix_'+date+'.xlsx', index=False, engine='openpyxl')
 
 def GeoGui():
@@ -147,7 +148,7 @@ def GeoGui():
 	[sg.Text('Select File (.xlsx or .csv): '), sg.In(key='ZiplabsReport'), sg.FileBrowse(target='ZiplabsReport', size=(10, 1))],
 	[sg.Button('Generate', size=(72, 1))],
 	[sg.Button('Generate Distance Matrix', size=(72, 1))],
-	[sg.Button('Export', size=(72, 1))],
+	[sg.Button('Export to Excel', size=(36, 1)), sg.Button('Export to Database', size=(36, 1))],
 	[sg.Multiline(size=(80,20), autoscroll=True, write_only=True, auto_refresh=True, reroute_stdout=True, )]]
 
 	window = sg.Window('Distance Matrix Finder', layout)
@@ -169,11 +170,18 @@ def GeoGui():
 				DistMat_df = converter(encoded_df)
 			except Exception as e: print(e)
 
-		if event == 'Export':
+		if event == 'Export to Excel':
 			try:
 				new_excel(DistMat_df)
-				print('Exporting to Database...')
 				print('Exporting New Excel...')
+				print('Successful!')
+				window.Refresh()
+			except Exception as e: print(e)
+
+		if event == 'Export to Database':
+			try:
+				new_db(DistMat_df)
+				print('Exporting to Database...')
 				print('Successful!')
 				window.Refresh()
 			except Exception as e: print(e)
