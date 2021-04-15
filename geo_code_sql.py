@@ -9,16 +9,6 @@ import sqlite3
 conn = sqlite3.connect('HdDB.db')
 c = conn.cursor()
 
-c.execute('''CREATE TABLE IF NOT EXISTS HDDistances(ReferenceNumber number,
-	Vin text, 
-	CustomerName text, 
-	Address text, 
-	VehicleSubStatus text,
-	OrderType text,  
-	TravelTime number, 
-	Distance number)''')
-
-conn.commit()
 
 
 
@@ -130,9 +120,32 @@ def distance_matrix(geo_data):
 
 #Export to excel
 def new_db(DistMat_df):
-	DistMat_df.to_sql('HDDistances', conn, if_exists='append', index = False)
 
-def new_excel(DistMat_df)
+	#Create new Table or irgnore if exi
+	c.execute('''CREATE TABLE IF NOT EXISTS HDDistances(ReferenceNumber number UNIQUE PRIMARY KEY,
+	Vin text, 
+	CustomerName text, 
+	Address text, 
+	VehicleSubStatus text,
+	OrderType text,  
+	TravelTime number, 
+	Distance number)''')
+
+	#create columns list for items to be inserted into columns
+	cols = "','".join([str(i)for i in DistMat_df.columns.tolist()])
+
+	#create insert into statement to insert individual rows into database
+	for i, row in DistMat_df.iterrows():
+		sql = "REPLACE INTO 'HDDistances' ('" +cols + "') VALUES (" + "?,"*(len(row)-1) + "?)"
+		c.execute(sql, tuple(row))
+
+	conn.commit()
+
+
+
+	#DistMat_df.to_sql('HDDistances', conn, if_exists='append', index = False)
+
+def new_excel(DistMat_df):
 	DistMat_df.to_excel('HomeDelivery_DistanceMatrix_'+date+'.xlsx', index=False, engine='openpyxl')
 
 def GeoGui():
@@ -146,9 +159,9 @@ def GeoGui():
 	#set GUI layout
 	layout = [[sg.Menu(menu_def, )],
 	[sg.Text('Select File (.xlsx or .csv): '), sg.In(key='ZiplabsReport'), sg.FileBrowse(target='ZiplabsReport', size=(10, 1))],
-	[sg.Button('Generate', size=(72, 1))],
+	[sg.Button('Intialize', size=(72, 1))],
 	[sg.Button('Generate Distance Matrix', size=(72, 1))],
-	[sg.Button('Export to Excel', size=(36, 1)), sg.Button('Export to Database', size=(36, 1))],
+	[sg.Button('Export to Excel', size=(35, 1)), sg.Button('Export to Database', size=(35, 1))],
 	[sg.Multiline(size=(80,20), autoscroll=True, write_only=True, auto_refresh=True, reroute_stdout=True, )]]
 
 	window = sg.Window('Distance Matrix Finder', layout)
@@ -157,7 +170,7 @@ def GeoGui():
 	while True:
 		event, values = window.read()
 
-		if event == 'Generate':
+		if event == 'Intialize':
 			file_read = values['ZiplabsReport']
 			try:
 				encoded_df = create_df(file_read)
