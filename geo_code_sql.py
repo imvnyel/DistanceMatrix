@@ -11,8 +11,6 @@ import sqlite3
 #create a list to temporarily save dataframes for exporting at a later time
 dataframe_library = []
 
-date = datetime.now().strftime("_%Y%m%d")
-
 
 #Database for exporting DistMatrix
 conn = sqlite3.connect('HdDB.db')
@@ -22,7 +20,18 @@ c = conn.cursor()
 log_conn = sqlite3.connect('FileLog.db')
 l = log_conn.cursor()
 
+#Check if file has already been converted
+def already_generated(file_read):
 
+	l.execute("select FILENAME from CREATED_FILES where FILENAME=?", (file_read,))
+	data = l.fetchall()
+	print(data)
+	if data == file_read:
+		return True
+	else:
+		return False
+
+#Track which files have already been Converted
 def log_db(file_read):
 	l.execute('''CREATE TABLE IF NOT EXISTS CREATED_FILES(id INT AUTO_INCREMENT PRIMARY KEY, 
 		FILENAME text UNIQUE,
@@ -60,7 +69,7 @@ def create_df(file_read):
 	encoded_df = df[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'OrderType', 'VehicleSubStatus', 'EncodedAddress', 'DeliveryZip', 'DeliveryCity']]
 	return encoded_df
 
-#Process GEOCODING & DISTANE MATRIX
+#Process GEOCODING & DISTANCE MATRIX
 def converter(geocode_df):
 
 	print('Geocoding Addresses...')
@@ -144,6 +153,7 @@ def distance_matrix(geo_data):
 #Export to database
 def new_db(DistMat_df):
 
+
 	#Create new Table or ignore if exists
 	c.execute('''CREATE TABLE IF NOT EXISTS HDDistances(ReferenceNumber number UNIQUE PRIMARY KEY,
 	Vin text, 
@@ -166,6 +176,9 @@ def new_db(DistMat_df):
 
 #Export to excel
 def new_excel(DistMat_df):
+
+	#Generate date for filenaming
+	date = datetime.now().strftime("_%Y%m%d")
 	DistMat_df.to_excel('HomeDelivery_DistanceMatrix_'+date+'.xlsx', index=False, engine='openpyxl')
 
 
@@ -194,10 +207,14 @@ def GeoGui():
 		if event == 'Intialize':
 			file_read = values['ZiplabsReport']
 			try:
-				encoded_df = create_df(file_read)
-				dataframe_library.append(encoded_df)
-				print('Preview\n', encoded_df.head())
-				window.Refresh()
+				check = already_generated(file_read)
+				if check is True:
+					encoded_df = create_df(file_read)
+					dataframe_library.append(encoded_df)
+					print('Preview\n', encoded_df.head())
+					window.Refresh()
+				else:
+					print ('File has already been created')
 			except Exception as e: print(e)
 
 		if event == 'Generate Distance Matrix':
