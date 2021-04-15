@@ -6,14 +6,36 @@ import string
 import PySimpleGUI as sg
 import sqlite3
 
-conn = sqlite3.connect('HdDB.db')
-c = conn.cursor()
 
 
-
+#create a list to temporarily save dataframes for exporting at a later time
+dataframe_library = []
 
 date = datetime.now().strftime("_%Y%m%d")
 
+
+#Database for exporting DistMatrix
+conn = sqlite3.connect('HdDB.db')
+c = conn.cursor()
+
+#Database for logging
+log_conn = sqlite3.connect('FileLog.db')
+l = log_conn.cursor()
+
+
+def log_db(file_read):
+	l.execute('''CREATE TABLE IF NOT EXISTS CREATED_FILES(id INT AUTO_INCREMENT PRIMARY KEY, 
+		FILENAME text UNIQUE,
+		DATE_CREATED timestamp)''')
+	print('table cerated')
+
+	save_sql = '''INSERT INTO CREATED_FILES (FILENAME, DATE_CREATED) VALUES(?, ?)'''
+
+	val = (file_read, datetime.now().strftime("%Y%m%d_%H%M"))
+	print(val)
+	l.execute(save_sql, tuple(val))
+
+	log_conn.commit()
 
 #Read and Create dataframe
 def create_df(file_read):
@@ -38,6 +60,7 @@ def create_df(file_read):
 	encoded_df = df[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'OrderType', 'VehicleSubStatus', 'EncodedAddress', 'DeliveryZip', 'DeliveryCity']]
 	return encoded_df
 
+#Process GEOCODING & DISTANE MATRIX
 def converter(geocode_df):
 
 	print('Geocoding Addresses...')
@@ -118,10 +141,10 @@ def distance_matrix(geo_data):
 			distance_to_loc = 0
 			return time_to_loc, distance_to_loc
 
-#Export to excel
+#Export to database
 def new_db(DistMat_df):
 
-	#Create new Table or irgnore if exi
+	#Create new Table or ignore if exists
 	c.execute('''CREATE TABLE IF NOT EXISTS HDDistances(ReferenceNumber number UNIQUE PRIMARY KEY,
 	Vin text, 
 	CustomerName text, 
@@ -141,12 +164,10 @@ def new_db(DistMat_df):
 
 	conn.commit()
 
-
-
-	#DistMat_df.to_sql('HDDistances', conn, if_exists='append', index = False)
-
+#Export to excel
 def new_excel(DistMat_df):
 	DistMat_df.to_excel('HomeDelivery_DistanceMatrix_'+date+'.xlsx', index=False, engine='openpyxl')
+
 
 def GeoGui():
 	menu_def = [['File', 'Exit'],
@@ -174,7 +195,8 @@ def GeoGui():
 			file_read = values['ZiplabsReport']
 			try:
 				encoded_df = create_df(file_read)
-				print('Preview\n', encoded_df.to_string())
+				dataframe_library.append(encoded_df)
+				print('Preview\n', encoded_df.head())
 				window.Refresh()
 			except Exception as e: print(e)
 
@@ -184,18 +206,22 @@ def GeoGui():
 			except Exception as e: print(e)
 
 		if event == 'Export to Excel':
+			file_read = values['ZiplabsReport']
 			try:
 				new_excel(DistMat_df)
 				print('Exporting New Excel...')
 				print('Successful!')
+				log_db(file_read)
 				window.Refresh()
 			except Exception as e: print(e)
 
 		if event == 'Export to Database':
+			file_read = values['ZiplabsReport']
 			try:
 				new_db(DistMat_df)
 				print('Exporting to Database...')
 				print('Successful!')
+				log_db(file_read)
 				window.Refresh()
 			except Exception as e: print(e)
 
@@ -204,12 +230,8 @@ def GeoGui():
 
 		if event == sg.WINDOW_CLOSED or event == 'Exit':
 			c.close()
+			l.close()
 			break
 
 ############### PROGRAM MAIN ####################
-
 GeoGui()
-
-'''encoded_df = create_df(file_read)
-print('Exporting New Excel...')
-new_excel(encoded_df)'''
