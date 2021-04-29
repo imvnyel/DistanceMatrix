@@ -1,3 +1,14 @@
 
 *.db
 *.xlsx
+dataframe.py
+__pycache__/converter.cpython-37.pyc
+__pycache__/converter.cpython-39.pyc
+__pycache__/dataframe.cpython-37.pyc
+__pycache__/Easy_df.cpython-37.pyc
+__pycache__/Easy_df.cpython-39.pyc
+__pycache__/converter.cpython-37.pyc
+__pycache__/converter.cpython-39.pyc
+__pycache__/dataframe.cpython-37.pyc
+__pycache__/Easy_df.cpython-37.pyc
+__pycache__/Easy_df.cpython-39.pyc
