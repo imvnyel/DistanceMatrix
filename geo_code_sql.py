@@ -23,22 +23,19 @@ l = log_conn.cursor()
 #Check if file has already been converted
 def already_generated(file_read):
 
-	l.execute("select FILENAME from CREATED_FILES where FILENAME=?", (file_read,))
+	l.execute("SELECT filename FROM created_files WHERE filename=?", (file_read,))
 	data = l.fetchall()
 	print(data)
-	if data == file_read:
-		return True
-	else:
-		return False
+	return data == file_read
 
 #Track which files have already been Converted
 def log_db(file_read):
-	l.execute('''CREATE TABLE IF NOT EXISTS CREATED_FILES(id INT AUTO_INCREMENT PRIMARY KEY, 
-		FILENAME text UNIQUE,
-		DATE_CREATED timestamp)''')
-	print('table cerated')
+	l.execute('''CREATE TABLE IF NOT EXISTS created_files(id INT AUTO_INCREMENT PRIMARY KEY, 
+		filename TEXT UNIQUE,
+		date_created TIMESTAMP)''')
+	print('Table created!')
 
-	save_sql = '''INSERT INTO CREATED_FILES (FILENAME, DATE_CREATED) VALUES(?, ?)'''
+	save_sql = '''INSERT INTO created_files (filename, date_created) VALUES(?, ?)'''
 
 	val = (file_read, datetime.now().strftime("%Y%m%d_%H%M"))
 	print(val)
@@ -55,18 +52,17 @@ def create_df(file_read):
 		df = pd.read_excel(file_read, index=None)
 		print('Reading .xlsx...')
 	else:
-		print('file type invalid!')
+		print('File type invalid!')
 
 	df.dropna(how='all')
 	#Combine address columns into single usable address
-	mylambda = lambda x : x.title()
-	df.DeliveryAddress = df.DeliveryAddress.apply(mylambda)
+	df.DeliveryAddress = df.DeliveryAddress.apply(lambda x : x.title())
 	df.DeliveryZip = df.DeliveryZip.apply(lambda x: str(x))
 	df['Address'] = df['DeliveryAddress'] + ' ' + df['DeliveryZip'] + ' ' + df['DeliveryCity']
 
 	#Create new dataframe to be used to create geocode
 	df['EncodedAddress'] = df.DeliveryAddress.apply(encode_address)
-	encoded_df = df[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'OrderType', 'VehicleSubStatus', 'EncodedAddress', 'DeliveryZip', 'DeliveryCity']]
+	encoded_df = df[['ReferenceNumber', 'Vin', 'CustomerName', 'Address', 'OrderType', 'VehicleSubStatus', 'EncodedAddress', 'DeliveryZip', 'DeliveryCity']]
 	return encoded_df
 
 #Process GEOCODING & DISTANCE MATRIX
@@ -100,22 +96,20 @@ def encode_address(address_data):
 def geo_code(data): 
 	address, zipcode, city = data['EncodedAddress'], data['DeliveryZip'], data['DeliveryCity']
 	headers = {
-	    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+		'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
 	}
 	call = requests.get('https://api.openrouteservice.org/geocode/search/structured?api_key=5b3ce3597851110001cf62487e38ccf07c2b4551ba276fa19e10ecdb&address={0}%2029&postalcode={1}&locality={2}'.format(address, zipcode, city), headers=headers)
 
+	coords = []
 	print(call.status_code, call.reason)
 	geo_json = json.loads(call.text)
 	try:
 		coords = [x for x in geo_json['features'][0]['geometry']['coordinates']]
 		print(coords)
 		return coords # longitude,latitude
-		try:
-			print('There was a problem GEOCODING address, please ensure address is correctly written: ', data['DeliveryCity'])
-			coords = []
-			return coords
-		except Exception as e: print(e)
-	except Exception as e: print(e)
+	except Exception as e: 
+		print('There was a problem GEOCODING address, please ensure address is correctly written: ', data['DeliveryCity'])
+		print(e)
 
 #Calculate distance Matrix
 def distance_matrix(geo_data):
@@ -156,20 +150,20 @@ def new_db(DistMat_df):
 
 	#Create new Table or ignore if exists
 	c.execute('''CREATE TABLE IF NOT EXISTS HDDistances(ReferenceNumber number UNIQUE PRIMARY KEY,
-	Vin text, 
-	CustomerName text, 
-	Address text, 
-	VehicleSubStatus text,
-	OrderType text,  
-	TravelTime number, 
-	Distance number)''')
+	Vin TEXT, 
+	CustomerName TEXT, 
+	Address TEXT, 
+	VehicleSubStatus TEXT,
+	OrderType TEXT,  
+	TravelTime NUMBER, 
+	Distance NUMBER)''')
 
 	#create columns list for items to be inserted into columns
-	cols = "','".join([str(i)for i in DistMat_df.columns.tolist()])
+	cols = "','".join([str(i) for i in DistMat_df.columns.tolist()])
 
 	#create insert into statement to insert individual rows into database
 	for i, row in DistMat_df.iterrows():
-		sql = "REPLACE INTO 'HDDistances' ('" +cols + "') VALUES (" + "?,"*(len(row)-1) + "?)"
+		sql = "REPLACE INTO 'HDDistances' ('" +cols + "') VALUES (" + "?," * (len(row)-1) + "?)"
 		c.execute(sql, tuple(row))
 
 	conn.commit()
@@ -179,7 +173,7 @@ def new_excel(DistMat_df):
 
 	#Generate date for filenaming
 	date = datetime.now().strftime("_%Y%m%d")
-	DistMat_df.to_excel('HomeDelivery_DistanceMatrix_'+date+'.xlsx', index=False, engine='openpyxl')
+	DistMat_df.to_excel('HomeDelivery_DistanceMatrix_' + date + '.xlsx', index=False, engine='openpyxl')
 
 
 def GeoGui():
