@@ -58,19 +58,23 @@ def create_df(file_read):
 		print('file type invalid!')
 
 	df.dropna(how='all')
-	#Combine address columns into single usable address
+
+	#Beautify the addresses
 	mylambda = lambda x : x.title()
+
 	df.DeliveryAddress = df.DeliveryAddress.apply(mylambda)
+	
 	df.DeliveryZip = df.DeliveryZip.apply(lambda x: str(x))
+	
 	df['Address'] = df['DeliveryAddress'] + ' ' + df['DeliveryZip'] + ' ' + df['DeliveryCity']
 
-	#Create new dataframe to be used to create geocode
+	#Create new column with encoded address
 	df['EncodedAddress'] = df.DeliveryAddress.apply(encode_address)
 	encoded_df = df[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'OrderType', 'VehicleSubStatus', 'EncodedAddress', 'DeliveryZip', 'DeliveryCity']]
+	
 	return encoded_df
 
-#Process GEOCODING & DISTANCE MATRIX
-def converter(geocode_df):
+def converter(geocode_df): #Process GEOCODING & DISTANCE MATRIX
 
 	print('Geocoding Addresses...')
 	geocode_df['Geocode'] = geocode_df.apply(geo_code, axis=1)
@@ -84,46 +88,58 @@ def converter(geocode_df):
 	#Strip 'RN' from ReferenceNumber to be used as Unique key in SQL server
 	geocode_df['ReferenceNumber'] = geocode_df.ReferenceNumber.apply(lambda x: x.strip('RN'))
 	convertered_df = geocode_df[['ReferenceNumber','Vin', 'CustomerName', 'Address', 'VehicleSubStatus','OrderType', 'TravelTime', 'Distance']]
+	
 	return convertered_df
 
-# Convert address into HTML query format
-def encode_address(address_data): 
+
+def encode_address(address_data): #Convert address into HTML query format
 	for x in string.punctuation:
 		if x != '.':
 			address_data = address_data.replace(x, '%20')
 		else:
 			address_data = address_data.replace(x, '')
+			
 	address_data = address_data.replace(' ', '%20')
+	
 	return address_data
 
-#Convert address to geocode coordinates
-def geo_code(data): 
+
+def geo_code(data): #Convert address to geocode coordinates
 	address, zipcode, city = data['EncodedAddress'], data['DeliveryZip'], data['DeliveryCity']
+	
 	headers = {
 	    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
 	}
-	call = requests.get('https://api.openrouteservice.org/geocode/search/structured?api_key=5b3ce3597851110001cf62487e38ccf07c2b4551ba276fa19e10ecdb&address={0}%2029&postalcode={1}&locality={2}'.format(address, zipcode, city), headers=headers)
+	call = requests.get('https://api.openrouteservice.org/geocode/search/structured? \
+			    api_key=5b3ce3597851110001cf62487e38ccf07c2b4551ba276fa19e10ecdb\
+			    &address={0}%2029&postalcode={1}&locality={2}'.format(address, zipcode, city), headers=headers)
 
 	print(call.status_code, call.reason)
+	
 	geo_json = json.loads(call.text)
+	
 	try:
 		coords = [x for x in geo_json['features'][0]['geometry']['coordinates']]
-		print(coords)
+
 		return coords # longitude,latitude
+	
 		try:
 			print('There was a problem GEOCODING address, please ensure address is correctly written: ', data['DeliveryCity'])
 			coords = []
+			
 			return coords
+		
 		except Exception as e: print(e)
+			
 	except Exception as e: print(e)
 
-#Calculate distance Matrix
-def distance_matrix(geo_data):
-	
-	geocode_column = geo_data['Geocode'] 
-	#Amflughafen = [13.541659971638602, 52.37798921652795]
-	location = {'Am-Flughafen': [13.541659971638602, 52.37798921652795]} #dictionary of location coordinates
 
+def distance_matrix(geo_data): #Calculate Distance Matrix
+	
+	geocode_column = geo_data['Geocode']
+	
+	#dictionary of location coordinates
+	location = {'Am-Flughafen': [13.541659971638602, 52.37798921652795]}
 
 	body = {"locations":[location['Am-Flughafen'], geocode_column],"metrics":["distance","duration"],"units":"km"}
 
@@ -150,8 +166,8 @@ def distance_matrix(geo_data):
 			distance_to_loc = 0
 			return time_to_loc, distance_to_loc
 
-#Export to database
-def new_db(DistMat_df):
+
+def new_db(DistMat_df): #Export to database
 
 
 	#Create new Table or ignore if exists
@@ -189,7 +205,6 @@ def GeoGui():
 	#Theme 
 	sg.theme('dark grey 9')
 
-
 	#set GUI layout
 	layout = [[sg.Menu(menu_def, )],
 	[sg.Text('Select File (.xlsx or .csv): '), sg.In(key='ZiplabsReport'), sg.FileBrowse(target='ZiplabsReport', size=(10, 1))],
@@ -200,7 +215,7 @@ def GeoGui():
 
 	window = sg.Window('Distance Matrix Finder', layout)
 
-		#Loop
+	#Loop
 	while True:
 		event, values = window.read()
 
@@ -208,6 +223,7 @@ def GeoGui():
 			file_read = values['ZiplabsReport']
 			try:
 				check = already_generated(file_read)
+				
 				if check is True:
 					encoded_df = create_df(file_read)
 					dataframe_library.append(encoded_df)
@@ -215,11 +231,13 @@ def GeoGui():
 					window.Refresh()
 				else:
 					print ('File has already been created')
+					
 			except Exception as e: print(e)
 
 		if event == 'Generate Distance Matrix':
 			try:
 				DistMat_df = converter(encoded_df)
+				
 			except Exception as e: print(e)
 
 		if event == 'Export to Excel':
